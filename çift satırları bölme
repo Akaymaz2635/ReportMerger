@@ -1,0 +1,45 @@
+import os
+import glob
+import pandas as pd
+
+# İşlem yapılacak klasör yolu
+input_folder = "C:/Users/alika/Desktop/Reporter_Project/Inputs"
+
+# Tüm .csv dosyalarını al
+csv_files = glob.glob(input_folder + "/*.csv")
+
+# Her bir csv dosyasını işle
+for file in csv_files:
+    # CSV dosyasını oku
+    df = pd.read_csv(file)
+
+    # Yeni satırları depolamak için bir liste
+    new_rows = []
+
+    # Satırları ve hücreleri dolaş
+    for index, row in df.iterrows():
+        for col in df.columns:
+            # Hücrede "/" var mı kontrol et
+            if "/" in str(row[col]):
+                # "/" ifadesinin solundaki ve sağındaki değerleri al
+                sol, sag = row[col].split("/")
+
+                # Mevcut satırın bir kopyasını oluştur
+                new_row = row.copy()
+
+                # Orijinal satırı "sol" değeriyle güncelle
+                df.at[index, col] = sol.strip()
+
+                # Kopyalanan satırı "sag" değeriyle güncelle
+                new_row[col] = sag.strip()
+                new_rows.append(new_row)
+
+    # Yeni satırları DataFrame'e ekle
+    new_df = pd.DataFrame(new_rows, columns=df.columns)
+    df = pd.concat([df, new_df], ignore_index=True)
+
+    # Güncellenmiş CSV dosyasını kaydet
+    output_file = os.path.join(input_folder, "updated_" + os.path.basename(file))
+    df.to_csv(output_file, index=False)
+
+    print(f"{file} dosyası güncellendi ve {output_file} olarak kaydedildi.")
