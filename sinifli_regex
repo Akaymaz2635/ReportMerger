@@ -1,0 +1,120 @@
+import re
+from abc import ABC, abstractmethod
+from typing import Dict, Any, List, Optional
+
+# Strateji arayüzü
+class OlcuStratejisi(ABC):
+    @abstractmethod
+    def eslesme_var_mi(self, olcu: str) -> bool:
+        pass
+    
+    @abstractmethod
+    def olcu_isle(self, olcu: str) -> Dict[str, Any]:
+        pass
+
+# Toleranslı ölçü stratejisi (±)
+class ToleransliStrateji(OlcuStratejisi):
+    def __init__(self):
+        self.desen = re.compile(r"(\d+\.?\d*)\s*\±\s*(\d+\.?\d*)")
+    
+    def eslesme_var_mi(self, olcu: str) -> bool:
+        return bool(self.desen.search(olcu))
+    
+    def olcu_isle(self, olcu: str) -> Dict[str, Any]:
+        eslesen = self.desen.search(olcu)
+        nominal = float(eslesen.group(1))
+        tolerans = float(eslesen.group(2))
+        return {
+            "nominal": nominal,
+            "alt_limit": nominal - tolerans,
+            "ust_limit": nominal + tolerans,
+            "format": "toleranslı"
+        }
+
+# Artı eksi ölçü stratejisi (+/-)
+class ArtiEksiStrateji(OlcuStratejisi):
+    def __init__(self):
+        self.desen = re.compile(r".*?(\d+\.?\d*)\s*\+\s*(\d+\.?\d*)\s*/\s*-\s*(\d+\.?\d*)")
+    
+    def eslesme_var_mi(self, olcu: str) -> bool:
+        return bool(self.desen.search(olcu))
+    
+    def olcu_isle(self, olcu: str) -> Dict[str, Any]:
+        eslesen = self.desen.search(olcu)
+        nominal = float(eslesen.group(1))
+        ust_tol = float(eslesen.group(2))
+        alt_tol = float(eslesen.group(3))
+        return {
+            "nominal": nominal,
+            "alt_limit": nominal - alt_tol,
+            "ust_limit": nominal + ust_tol,
+            "format": "artı-eksi"
+        }
+
+# MAX ölçü stratejisi
+class MaxStrateji(OlcuStratejisi):
+    def __init__(self):
+        self.desen = re.compile(r"MAX\s*(\d+\.?\d*)", re.IGNORECASE)
+    
+    def eslesme_var_mi(self, olcu: str) -> bool:
+        return bool(self.desen.search(olcu))
+    
+    def olcu_isle(self, olcu: str) -> Dict[str, Any]:
+        eslesen = self.desen.search(olcu)
+        return {
+            "nominal": None,
+            "alt_limit": None,
+            "ust_limit": float(eslesen.group(1)),
+            "format": "maksimum"
+        }
+
+# MIN ölçü stratejisi
+class MinStrateji(OlcuStratejisi):
+    def __init__(self):
+        self.desen = re.compile(r"MIN\s*(\d+\.?\d*)", re.IGNORECASE)
+    
+    def eslesme_var_mi(self, olcu: str) -> bool:
+        return bool(self.desen.search(olcu))
+    
+    def olcu_isle(self, olcu: str) -> Dict[str, Any]:
+        eslesen = self.desen.search(olcu)
+        return {
+            "nominal": None,
+            "alt_limit": float(eslesen.group(1)),
+            "ust_limit": None,
+            "format": "minimum"
+        }
+
+# Ölçü işlemcisi
+class OlcuIslemcisi:
+    def __init__(self):
+        self.stratejiler: List[OlcuStratejisi] = [
+            ToleransliStrateji(),
+            ArtiEksiStrateji(),
+            MaxStrateji(),
+            MinStrateji()
+        ]
+    
+    def olcu_isle(self, olcu: str) -> Optional[Dict[str, Any]]:
+        for strateji in self.stratejiler:
+            if strateji.eslesme_var_mi(olcu):
+                return strateji.olcu_isle(olcu)
+        return None
+
+# Kullanım
+olculer = [
+    "25.55±0.1",
+    "1±0.1",
+    "Ø250 +0.1/-0.1",
+    "MAX 6.3",
+    "MIN 4",
+]
+
+islemci = OlcuIslemcisi()
+
+for olcu in olculer:
+    sonuc = islemci.olcu_isle(olcu)
+    if sonuc:
+        print(f"{olcu} => {sonuc}")
+    else:
+        print(f"{olcu} => Uyumlu format bulunamadı")
