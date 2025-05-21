@@ -1,0 +1,58 @@
+import re
+
+olculer = [
+    "25.55±0.1",
+    "1±0.1",
+    "Ø250 +0.1/-0.1",
+    "MAX 6.3",
+    "MIN 4",
+]
+
+# Tüm desenler için tek bir birleşik desen
+birlesik_desen = r"""
+    (?:
+        (?P<nominal1>\d+\.?\d*)\s*\±\s*(?P<tolerans>\d+\.?\d*)  # Format: 25.55±0.1
+        |
+        .*?(?P<nominal2>\d+\.?\d*)\s*\+\s*(?P<ust_tol>\d+\.?\d*)\s*/\s*-\s*(?P<alt_tol>\d+\.?\d*)  # Format: Ø250 +0.1/-0.1
+        |
+        MAX\s*(?P<max_deger>\d+\.?\d*)  # Format: MAX 6.3
+        |
+        MIN\s*(?P<min_deger>\d+\.?\d*)  # Format: MIN 4
+    )
+"""
+
+for olcu in olculer:
+    eslesen = re.search(birlesik_desen, olcu, re.IGNORECASE | re.VERBOSE)
+    
+    if eslesen:
+        gruplar = eslesen.groupdict()
+        
+        # ± formatı
+        if gruplar["nominal1"]:
+            nominal = float(gruplar["nominal1"])
+            tolerans = float(gruplar["tolerans"])
+            alt_limit = nominal - tolerans
+            ust_limit = nominal + tolerans
+            print(f"{olcu} => Nominal: {nominal}, Alt Limit: {alt_limit}, Üst Limit: {ust_limit}")
+        
+        # +/- formatı
+        elif gruplar["nominal2"]:
+            nominal = float(gruplar["nominal2"])
+            ust_tol = float(gruplar["ust_tol"])
+            alt_tol = float(gruplar["alt_tol"])
+            alt_limit = nominal - alt_tol
+            ust_limit = nominal + ust_tol
+            print(f"{olcu} => Nominal: {nominal}, Alt Limit: {alt_limit}, Üst Limit: {ust_limit}")
+        
+        # MAX formatı
+        elif gruplar["max_deger"]:
+            ust_limit = float(gruplar["max_deger"])
+            print(f"{olcu} => Üst Limit: {ust_limit}")
+        
+        # MIN formatı
+        elif gruplar["min_deger"]:
+            alt_limit = float(gruplar["min_deger"])
+            print(f"{olcu} => Alt Limit: {alt_limit}")
+    
+    else:
+        print(f"{olcu} => Uyumlu format bulunamadı")
