@@ -1,0 +1,169 @@
+import re
+from abc import ABC, abstractmethod
+from typing import Optional, Tuple, Dict, Any
+
+class OlcuFormati(ABC):
+    """Ölçü formatları için soyut temel sınıf"""
+    
+    @abstractmethod
+    def eslestir(self, olcu: str) -> bool:
+        pass
+    
+    @abstractmethod
+    def degerler(self) -> Dict[str, Any]:
+        pass
+
+class ToleransliOlcu(OlcuFormati):
+    """Örnek: 25.55±0.1"""
+    
+    def __init__(self):
+        self.desen = r"(\d+\.?\d*)\s*\±\s*(\d+\.?\d*)"
+        self.nominal = None
+        self.tolerans = None
+    
+    def eslestir(self, olcu: str) -> bool:
+        eslesen = re.search(self.desen, olcu)
+        if eslesen:
+            self.nominal = float(eslesen.group(1))
+            self.tolerans = float(eslesen.group(2))
+            return True
+        return False
+    
+    def degerler(self) -> Dict[str, Any]:
+        return {
+            "nominal": self.nominal,
+            "alt_limit": self.nominal - self.tolerans if self.nominal is not None else None,
+            "ust_limit": self.nominal + self.tolerans if self.nominal is not None else None,
+            "format": "toleranslı"
+        }
+
+class ArtiEksiOlcu(OlcuFormati):
+    """Örnek: Ø250 +0.1/-0.1"""
+    
+    def __init__(self):
+        self.desen = r".*?(\d+\.?\d*)\s*\+\s*(\d+\.?\d*)\s*/\s*-\s*(\d+\.?\d*)"
+        self.nominal = None
+        self.ust_tol = None
+        self.alt_tol = None
+    
+    def eslestir(self, olcu: str) -> bool:
+        eslesen = re.search(self.desen, olcu)
+        if eslesen:
+            self.nominal = float(eslesen.group(1))
+            self.ust_tol = float(eslesen.group(2))
+            self.alt_tol = float(eslesen.group(3))
+            return True
+        return False
+    
+    def degerler(self) -> Dict[str, Any]:
+        return {
+            "nominal": self.nominal,
+            "alt_limit": self.nominal - self.alt_tol if self.nominal is not None else None,
+            "ust_limit": self.nominal + self.ust_tol if self.nominal is not None else None,
+            "format": "artı-eksi"
+        }
+
+class MaxOlcu(OlcuFormati):
+    """Örnek: MAX 6.3"""
+    
+    def __init__(self):
+        self.desen = r"MAX\s*(\d+\.?\d*)"
+        self.deger = None
+    
+    def eslestir(self, olcu: str) -> bool:
+        eslesen = re.search(self.desen, olcu, re.IGNORECASE)
+        if eslesen:
+            self.deger = float(eslesen.group(1))
+            return True
+        return False
+    
+    def degerler(self) -> Dict[str, Any]:
+        return {
+            "nominal": None,
+            "alt_limit": None,
+            "ust_limit": self.deger,
+            "format": "maksimum"
+        }
+
+class MinOlcu(OlcuFormati):
+    """
+    Minimum değer formatlarını yakalar:
+    - MIN 4
+    - 4 MIN  
+    - R 4 MIN
+    - MIN R 4
+    - R4 MIN (boşluksuz)
+    """
+    
+    def __init__(self):
+        # Birden fazla regex deseni tanımlıyoruz
+        self.desenler = [
+            r"MIN\s+R?\s*(\d+\.?\d*)",      # MIN 4, MIN R 4
+            r"R?\s*(\d+\.?\d*)\s+MIN",      # 4 MIN, R 4 MIN  
+            r"R(\d+\.?\d*)\s+MIN",          # R4 MIN (boşluksuz)
+        ]
+        self.deger = None
+    
+    def eslestir(self, olcu: str) -> bool:
+        """Tüm desenleri sırayla dener"""
+        olcu_temiz = olcu.strip().upper()  # Boşlukları temizle, büyük harfe çevir
+        
+        for desen in self.desenler:
+            eslesen = re.search(desen, olcu_temiz, re.IGNORECASE)
+            if eslesen:
+                # Son yakalanan grup sayısal değerdir
+                self.deger = float(eslesen.group(1))
+                return True
+        return False
+    
+    def degerler(self) -> Dict[str, Any]:
+        return {
+            "nominal": None,
+            "alt_limit": self.deger,
+            "ust_limit": None,
+            "format": "minimum"
+        }
+
+class OlcuYakalayici:
+    """Tüm ölçü formatlarını işleyen ana sınıf"""
+    
+    def __init__(self):
+        self.format_tipleri = [
+            ToleransliOlcu(),
+            ArtiEksiOlcu(),
+            MaxOlcu(),
+            MinOlcu()
+        ]
+    
+    def isle(self, olcu: str) -> Optional[Dict[str, Any]]:
+        for format_tipi in self.format_tipleri:
+            if format_tipi.eslestir(olcu):
+                return format_tipi.degerler()
+        return None
+
+# Kullanım
+olculer = [
+    "25.55±0.1",
+    "1±0.1",
+    "Ø250 +0.1/-0.1",
+    "MAX 6.3",
+    "MIN 4",
+    "6.3 MAX",
+    "5 MIN",
+    "MIN 4",
+    "4 MIN", 
+    "R 4 MIN",
+    "MIN R 4",
+    "R4 MIN",
+    "min 2.5",    
+    "  MIN  R  3.14  ",
+]
+
+yakalayici = OlcuYakalayici()
+
+for olcu in olculer:
+    sonuc = yakalayici.isle(olcu)
+    if sonuc:
+        print(f"{olcu} => {sonuc}")
+    else:
+        print(f"{olcu} => Uyumlu format bulunamadı")
